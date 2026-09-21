@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+model/distilbert_final/
+model/ann/*.pt
+dataset/*.csv
+*.pkl
