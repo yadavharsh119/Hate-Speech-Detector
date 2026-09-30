@@ -42,6 +42,12 @@ class ModeratorResponse(ModeratorBase):
 
 # --- ACTION LOG SCHEMAS ---
 
+class ModeratorActionRequest(BaseModel):
+    tweet_id: int
+    moderator_id: int
+    verdict: str
+    action_taken: str
+
 class ActionLogBase(BaseModel):
     tweet_id: int
     moderator_id: int

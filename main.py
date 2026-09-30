@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from database import engine, Base
-from routes import tweets
+from routes import tweets, moderator
 
 # Create the database tables
 # This simple setup creates the 'hatespeech.db' file in the root directory
@@ -14,6 +14,7 @@ app = FastAPI(
 )
 
 app.include_router(tweets.router)
+app.include_router(moderator.router)
 
 @app.get("/")
 def read_root():
