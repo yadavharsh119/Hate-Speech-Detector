@@ -48,7 +48,7 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
     # 5. Member 2: CSP Assignment (only if flagged)
     if ai_result["flagged"]:
         from services.csp_assigner import assign_moderator
-        assigned_mod_id = assign_moderator(new_tweet.id, new_tweet.ai_category, db)
+        assigned_mod_id = assign_moderator(new_tweet.id, new_tweet.ai_category, new_tweet.text, db)
         
         if assigned_mod_id:
             # Create the assignment
