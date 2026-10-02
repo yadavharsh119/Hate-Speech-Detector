@@ -25,12 +25,12 @@ def assign_moderator(tweet_id, tweet_language, tweet_severity, moderators_list):
 
     # 3. Hard Constraint 2: Language Check
     def language_check(mod):
-        return tweet_language in mod["languages"]
+        return tweet_language in (mod.get("languages") or [])
 
     # 4. Priority Constraint 3: Seniority Check for Severe Tweets
     def seniority_check(mod):
         if tweet_severity == "Severe":
-            return mod["role"] == "Senior"
+            return str(mod.get("role", "")).lower() == "senior"
         return True
 
     # Apply constraints to solver
@@ -78,7 +78,7 @@ class PriorityBufferQueue:
     Manages unassigned tweets when all matching moderators are at full capacity.
     Orders tasks by Severity (Severe -> Moderate -> Mild) and arrival time.
     """
-    SEVERITY_ORDER = {"Severe": 1, "Moderate": 2, "Mild": 3}
+    SEVERITY_ORDER = {"Severe": 1, "Severe Hate": 1, "Moderate": 2, "Moderate Hate": 2, "Mild": 3}
 
     def __init__(self):
         self.queue = []

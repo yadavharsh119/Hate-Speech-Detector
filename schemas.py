@@ -21,6 +21,7 @@ class TweetBase(BaseModel):
 class TweetResponse(TweetBase):
     id: int
     created_at: datetime
+    author_handle: Optional[str] = None
 
     class Config:
         from_attributes = True

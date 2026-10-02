@@ -12,7 +12,12 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
     Ingest a new tweet from the Twitter API.
     Creates the user if they don't exist, and stores the tweet as "pending".
     """
-    # 1. Check if the author exists in our database, if not create them.
+    # 1. Check if we've already ingested this exact tweet (avoid duplicates)
+    existing_tweet = db.query(models.Tweet).filter(models.Tweet.tweet_id_str == request.tweet_id_str).first()
+    if existing_tweet:
+        raise HTTPException(status_code=400, detail="Tweet already exists in the system")
+
+    # 2. Check if the author exists in our database, if not create them.
     user = db.query(models.User).filter(models.User.twitter_user_id == request.author_twitter_id).first()
     if not user:
         user = models.User(
@@ -22,11 +27,6 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
         db.add(user)
         db.commit()
         db.refresh(user)
-
-    # 2. Check if we've already ingested this exact tweet (avoid duplicates)
-    existing_tweet = db.query(models.Tweet).filter(models.Tweet.tweet_id_str == request.tweet_id_str).first()
-    if existing_tweet:
-        raise HTTPException(status_code=400, detail="Tweet already exists in the system")
 
     # 3. Create the Tweet record initially as pending
     new_tweet = models.Tweet(
@@ -65,7 +65,7 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
             new_tweet.status = "assigned"
         else:
             # AI flagged it, but no moderators are available right now
-            new_tweet.status = "classified"
+            new_tweet.status = "queued"
     else:
         # Clean tweet, no review needed
         new_tweet.status = "classified"

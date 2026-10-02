@@ -87,7 +87,7 @@ def test_moderator_at_max_capacity_never_chosen(monkeypatch):
     
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "classified"
+    assert data["status"] == "queued"
 
 def test_no_available_moderators_no_crash(monkeypatch):
     # No moderators added to DB
@@ -105,7 +105,7 @@ def test_no_available_moderators_no_crash(monkeypatch):
     
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "classified"
+    assert data["status"] == "queued"
 
 def test_language_matching_prefers_matching_moderator(monkeypatch):
     db = TestingSessionLocal()
