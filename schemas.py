@@ -58,6 +58,7 @@ class ActionLogBase(BaseModel):
 class ActionLogResponse(ActionLogBase):
     id: int
     timestamp: datetime
+    enforcement_status: Optional[str] = None
 
     class Config:
         from_attributes = True

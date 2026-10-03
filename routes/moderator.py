@@ -4,6 +4,7 @@ from sqlalchemy import case
 import models
 import schemas
 from database import get_db
+from services.enforcement import EnforcementService
 
 VALID_VERDICTS = {"clean", "mild_hate", "hate_speech", "severe_threat"}
 VALID_ACTIONS = {"no_action", "warning_reply", "delete", "delete_and_strike"}
@@ -106,10 +107,25 @@ def submit_moderator_action(request: schemas.ModeratorActionRequest, db: Session
             queued_tweet.status = "assigned"
 
     # Save all changes safely in one transaction
+    # Phase 6: execute platform enforcement BEFORE committing so that
+    # Warning / StrikeLog records added by EnforcementService are included
+    # in the same transaction.
+    enforcement_result = EnforcementService().execute(
+        request.action_taken,
+        tweet,
+        db,
+        request.verdict,
+    )
+
     db.commit()
     db.refresh(action_log)
 
-    # NOTE: Phase 6 will handle actually enforcing this action on Twitter 
-    # (e.g., calling Twitter API to delete/warn) and updating User strike logs.
-
-    return action_log
+    return {
+        "id": action_log.id,
+        "tweet_id": action_log.tweet_id,
+        "moderator_id": action_log.moderator_id,
+        "verdict": action_log.verdict,
+        "action_taken": action_log.action_taken,
+        "timestamp": action_log.timestamp,
+        "enforcement_status": enforcement_result["status"],
+    }
