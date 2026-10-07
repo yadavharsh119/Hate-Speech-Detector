@@ -69,7 +69,7 @@ st.markdown(
 
 # Backend API Configuration (FastAPI default port)
 BACKEND_API_URL = "http://localhost:8000/api"
-USE_MOCK = False  # Connected directly to FastAPI backend
+USE_MOCK = True  # Connected directly to FastAPI backend
 
 
 # Helper Function to Load Assigned Queue
