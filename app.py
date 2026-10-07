@@ -1,258 +1,270 @@
-import os
-import requests
 import streamlit as st
+import requests
+import json
 
-# Configure Dashboard Layout
+# ==========================================
+# PAGE CONFIGURATION & STYLING
+# ==========================================
 st.set_page_config(
     page_title="Hate Speech Moderation Dashboard",
     page_icon="🛡️",
-    layout="wide",
+    layout="wide"
 )
 
-# Custom CSS for UI Enhancement
-st.markdown(
-    """
+# Custom Styling
+st.markdown("""
     <style>
-    /* Main Background Accent */
-    .main {
-        background-color: #0e1117;
-    }
-    
-    /* Header Card Styling */
-    .header-card {
-        background: linear-gradient(135deg, #1e2640 0%, #0f172a 100%);
-        padding: 24px;
-        border-radius: 12px;
-        border-left: 6px solid #6366f1;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    
-    /* Content Preview Card */
-    .content-box {
-        background-color: #1e293b;
-        padding: 20px;
+    .main-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        padding: 1.5rem;
         border-radius: 10px;
-        border: 1px solid #334155;
-        font-size: 1.15rem;
-        color: #f8fafc;
-        margin-top: 10px;
-        margin-bottom: 15px;
-    }
-    
-    /* Dynamic Severity Badges */
-    .badge-clean {
-        background-color: #10b981;
         color: white;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: bold;
+        margin-bottom: 2rem;
     }
-    .badge-moderate {
-        background-color: #f59e0b;
-        color: white;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: bold;
-    }
-    .badge-severe {
-        background-color: #ef4444;
-        color: white;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: bold;
-    }
+    .badge-clean { background-color: #059669; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .badge-mild { background-color: #d97706; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .badge-hate { background-color: #dc2626; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .badge-severe { background-color: #7f1d1d; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
     </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-# Backend API Configuration (FastAPI default port)
-BACKEND_API_URL = "http://localhost:8000/api"
-USE_MOCK = True  # Connected directly to FastAPI backend
+# ==========================================
+# CONFIGURATION & STATE MANAGEMENT
+# ==========================================
+# Toggle USE_MOCK to True for local testing, or False for FastAPI Live Backend connection
+USE_MOCK = True  
+API_BASE_URL = "http://localhost:8000"
 
+if "queue_data" not in st.session_state:
+    st.session_state.queue_data = []
 
-# Helper Function to Load Assigned Queue
-def load_assigned_tweets(moderator_id: int):
+# Mock initial queue data for offline UI testing
+MOCK_QUEUE = [
+    {
+        "post_id": 101,
+        "post_text": "You are completely useless and nobody wants you here!",
+        "predicted_severity": "Hate Speech",
+        "confidence_score": "88%",
+        "dialect": "English",
+        "timestamp": "2026-10-08 10:15 AM"
+    },
+    {
+        "post_id": 102,
+        "post_text": "This movie was absolute trash, don't waste your money.",
+        "predicted_severity": "Mild Hate",
+        "confidence_score": "72%",
+        "dialect": "Slang",
+        "timestamp": "2026-10-08 10:18 AM"
+    },
+    {
+        "post_id": 103,
+        "post_text": "Go back where you came from before we make you regret it.",
+        "predicted_severity": "Severe Threat",
+        "confidence_score": "95%",
+        "dialect": "English",
+        "timestamp": "2026-10-08 10:22 AM"
+    }
+]
+
+# Helper function to load review queue
+def fetch_review_queue(mod_id):
     if USE_MOCK:
-        return [
-            {
-                "id": 1,
-                "tweet_id_str": "17981234567890123",
-                "text": "This picture is not looking good, disappointing post.",
-                "author_handle": "@insta_user_1",
-                "ai_category": "Clean",
-                "confidence_score": 0.92,
-                "status": "assigned",
-                "created_at": "2026-10-07T09:15:00",
-            },
-            {
-                "id": 2,
-                "tweet_id_str": "17981234567890124",
-                "text": "Go back to where you came from, nobody wants you here!",
-                "author_handle": "@troll_user99",
-                "ai_category": "Moderate Hate",
-                "confidence_score": 0.88,
-                "status": "assigned",
-                "created_at": "2026-10-07T09:18:22",
-            },
-            {
-                "id": 3,
-                "tweet_id_str": "17981234567890125",
-                "text": "We will find you and make sure you pay for this.",
-                "author_handle": "@threat_actor_0",
-                "ai_category": "Severe Hate",
-                "confidence_score": 0.97,
-                "status": "assigned",
-                "created_at": "2026-10-07T09:22:10",
-            },
-        ]
+        return st.session_state.get("queue_data", MOCK_QUEUE)
     else:
         try:
-            res = requests.get(f"{BACKEND_API_URL}/moderator-queue/{moderator_id}")
+            res = requests.get(f"{API_BASE_URL}/api/moderator-queue/{mod_id}")
             if res.status_code == 200:
                 return res.json()
             else:
-                st.error(f"Error fetching queue: HTTP {res.status_code}")
+                st.error(f"Failed to fetch queue from backend (Status Code: {res.status_code})")
                 return []
         except Exception as e:
             st.error(f"Backend API offline: {e}")
             return []
 
-
-# Helper Function to Submit Enforcement Actions
-def send_moderation_action(tweet_id: int, moderator_id: int, verdict: str, action_taken: str):
-    payload = {
-        "tweet_id": tweet_id,
-        "moderator_id": moderator_id,
-        "verdict": verdict,
-        "action_taken": action_taken,
-    }
-
+# Helper function to submit moderation actions
+def send_moderation_action(mod_id, post_id, action_type):
     if USE_MOCK:
-        st.toast(f"Action Recorded (Mock): {action_taken} for Tweet #{tweet_id}", icon="✅")
-        return True
+        # Update local state in mock mode
+        if "queue_data" in st.session_state and st.session_state.queue_data:
+            st.session_state.queue_data = [item for item in st.session_state.queue_data if item["post_id"] != post_id]
+        else:
+            global MOCK_QUEUE
+            MOCK_QUEUE = [item for item in MOCK_QUEUE if item["post_id"] != post_id]
+        st.toast(f"Action Submitted: {action_type} for Post #{post_id}!", icon="✅")
+        st.rerun()
     else:
         try:
-            res = requests.post(f"{BACKEND_API_URL}/moderator-action", json=payload)
+            payload = {
+                "moderator_id": mod_id,
+                "post_id": post_id,
+                "action": action_type
+            }
+            res = requests.post(f"{API_BASE_URL}/api/moderator-action", json=payload)
             if res.status_code == 200:
-                data = res.json()
-                st.toast(
-                    f"Enforcement triggered: {action_taken} (Status: {data.get('enforcement_status')})",
-                    icon="🚀",
-                )
-                return True
+                st.toast(f"Action Recorded: {action_type}", icon="✅")
+                st.rerun()
             else:
-                st.error(f"Failed to submit action: {res.text}")
-                return False
+                st.error(f"Failed to process action: {res.text}")
         except Exception as e:
-            st.error(f"Error connecting to backend: {e}")
-            return False
+            st.error(f"Error connecting to server: {e}")
 
+# Initialize session queue if empty
+if not st.session_state.queue_data and USE_MOCK:
+    st.session_state.queue_data = MOCK_QUEUE.copy()
 
-# --- SIDEBAR: Moderator Profile & CSP Controls ---
-st.sidebar.title("🛡️ Moderator Profile")
+# ==========================================
+# SIDEBAR: MODERATOR PROFILE & CSP METRICS
+# ==========================================
+with st.sidebar:
+    st.title("👤 Moderator Profile")
+    
+    active_mod_id = st.number_input("Active Moderator ID", min_value=1, max_value=10, value=1, step=1)
+    
+    st.markdown("---")
+    st.write("**Platform Source:**", "⚙️ Mock Testing Pipeline" if USE_MOCK else "🟢 API Integration Pipeline")
+    st.write("**Assigned Dialects/Skills:**", "English, Slang" if active_mod_id % 2 != 0 else "Hindi, Urdu")
+    
+    st.markdown("---")
+    st.subheader("Workload Capacity (CSP)")
+    
+    current_items = len(fetch_review_queue(active_mod_id))
+    max_capacity = 5
+    capacity_pct = min(current_items / max_capacity, 1.0)
+    
+    st.progress(capacity_pct)
+    st.caption(f"Active Load: **{current_items} / {max_capacity}** Assigned")
+    
+    st.markdown("---")
+    if st.button("🔄 Refresh Review Queue", use_container_width=True):
+        if USE_MOCK:
+            st.session_state.queue_data = MOCK_QUEUE.copy()
+            st.toast("Mock Queue Refreshed!", icon="ℹ️")
+        st.rerun()
 
-mod_id = st.sidebar.number_input("Active Moderator ID", min_value=1, value=1, step=1)
-
-st.sidebar.markdown("**Platform Source:** `API Integration Pipeline`")
-st.sidebar.markdown("**Assigned Dialects/Skills:** `English`, `Slang`")
-st.sidebar.divider()
-
-# Refresh Queue Control
-if st.sidebar.button("🔄 Refresh Review Queue", use_container_width=True):
-    st.rerun()
-
-# Workload Capacity Section
-MAX_CAPACITY = 5
-tweets = load_assigned_tweets(mod_id)
-active_count = len(tweets)
-
-st.sidebar.subheader("Workload Capacity (CSP)")
-st.sidebar.progress(min(active_count / MAX_CAPACITY, 1.0))
-st.sidebar.write(f"Active Load: **{active_count} / {MAX_CAPACITY} Assigned**")
-st.sidebar.divider()
-
-# --- MAIN DASHBOARD HEADER ---
-st.markdown(
-    """
-    <div class="header-card">
-        <h1 style="color: #ffffff; margin:0;">🛡️ Hate Speech Content Moderation Dashboard</h1>
-        <p style="color: #94a3b8; margin-top: 5px; font-size: 1.05rem;">
-            Hybrid AI Classification & CSP Workload-Routed Flagged Content Review
-        </p>
+# ==========================================
+# MAIN PANEL: HEADER
+# ==========================================
+st.markdown("""
+    <div class="main-header">
+        <h1>🛡️ Hate Speech Content Moderation Dashboard</h1>
+        <p>Hybrid AI Classification & CSP Workload-Routed Flagged Content Review</p>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-if not tweets:
-    st.info("No active flagged content in queue for this moderator.")
-else:
-    # Sidebar selection for active tweet
-    tweet_options = {
-        f"Item #{t['id']} - [{t.get('ai_category', 'Unclassified')}]": t for t in tweets
-    }
-    selected_label = st.sidebar.radio("Select Flagged Content:", list(tweet_options.keys()))
-    active_tweet = tweet_options[selected_label]
+# ==========================================
+# FEATURE: INTERACTIVE CUSTOM COMMENT TESTER
+# ==========================================
+with st.expander("🧪 Test Custom Comment / Live Ingestion", expanded=False):
+    st.markdown("Type a custom post or comment below to run it through the system:")
+    
+    user_input = st.text_area("Enter comment text:", placeholder="e.g., You are so stupid and useless!", key="custom_input_text")
+    
+    if st.button("Analyze & Route Comment", type="primary"):
+        if user_input.strip():
+            if USE_MOCK:
+                text_lower = user_input.lower()
+                if any(w in text_lower for w in ["kill", "attack", "destroy", "die"]):
+                    severity = "Severe Threat"
+                    confidence = "96%"
+                    badge_class = "badge-severe"
+                elif any(w in text_lower for w in ["hate", "stupid", "idiot", "dumb", "useless"]):
+                    severity = "Hate Speech"
+                    confidence = "88%"
+                    badge_class = "badge-hate"
+                elif any(w in text_lower for w in ["annoying", "bad", "fool", "trash"]):
+                    severity = "Mild Hate"
+                    confidence = "72%"
+                    badge_class = "badge-mild"
+                else:
+                    severity = "Clean"
+                    confidence = "94%"
+                    badge_class = "badge-clean"
 
-    # --- MAIN CONTENT LAYOUT (2 COLUMNS) ---
-    col_left, col_right = st.columns([1.2, 1])
+                # Add newly created post directly into active mock queue
+                new_post = {
+                    "post_id": len(st.session_state.queue_data) + 201,
+                    "post_text": user_input,
+                    "predicted_severity": severity,
+                    "confidence_score": confidence,
+                    "dialect": "English",
+                    "timestamp": "Just Now"
+                }
+                st.session_state.queue_data.insert(0, new_post)
+                
+                st.success("Analysis Complete & Added to Review Queue!")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown(f"**Predicted Severity:** <span class='{badge_class}'>{severity}</span>", unsafe_allow_html=True)
+                with col_b:
+                    st.markdown(f"**Model Confidence:** `{confidence}`")
+                st.rerun()
 
-    # Left Column: Flagged Content & AI Metadata
-    with col_left:
-        st.subheader("📋 Content Details & AI Classification")
-
-        cat = active_tweet.get("ai_category", "Unknown")
-        confidence = active_tweet.get("confidence_score", 0.0)
-        conf_pct = f"{int(confidence * 100)}%" if confidence else "N/A"
-
-        # Determine Badge Style
-        if "clean" in cat.lower():
-            badge_class = "badge-clean"
-        elif "severe" in cat.lower():
-            badge_class = "badge-severe"
+            else:
+                # Live FastAPI Endpoint Request
+                try:
+                    res = requests.post(f"{API_BASE_URL}/api/ingest", json={"text": user_input})
+                    if res.status_code == 200:
+                        st.success("Post successfully ingested into backend database!")
+                        st.rerun()
+                    else:
+                        st.error(f"Backend API error: {res.status_code}")
+                except Exception as e:
+                    st.error(f"Could not connect to FastAPI server: {e}")
         else:
-            badge_class = "badge-moderate"
+            st.warning("Please enter some text before submitting.")
 
-        st.markdown(
-            f"**Author:** `{active_tweet.get('author_handle', '@unknown')}` | "
-            f"**Database ID:** `{active_tweet['id']}`"
-        )
-        st.markdown(f"**Platform Content ID:** `{active_tweet.get('tweet_id_str', 'N/A')}`")
-        st.markdown(f"**Ingested At:** {active_tweet.get('created_at', 'N/A')}")
+st.markdown("---")
 
-        st.markdown(
-            f'<div class="content-box">"{active_tweet.get("text", "")}"</div>',
-            unsafe_allow_html=True,
-        )
+# ==========================================
+# MAIN PANEL: REVIEW QUEUE RENDERING
+# ==========================================
+queue_items = fetch_review_queue(active_mod_id)
 
-        # Metrics display
-        m1, m2 = st.columns(2)
-        m1.markdown(f"**AI Category Tag:** <span class='{badge_class}'>{cat}</span>", unsafe_allow_html=True)
-        m2.metric(label="AI Model Confidence", value=conf_pct)
-
-    # Right Column: Enforcement Controls
-    with col_right:
-        st.subheader("⚡ Enforcement Controls")
-        st.write("Execute moderation action based on severity verdict:")
-
-        # Action 1: Clean / No Action
-        if st.button("🟢 Approve / Clean (no_action)", use_container_width=True, type="secondary"):
-            if send_moderation_action(active_tweet["id"], mod_id, "clean", "no_action"):
-                st.rerun()
-
-        # Action 2: Mild Hate / Warning
-        if st.button("🟡 Warning Reply (warning_reply)", use_container_width=True, type="secondary"):
-            if send_moderation_action(active_tweet["id"], mod_id, "mild_hate", "warning_reply"):
-                st.rerun()
-
-        # Action 3: Hate Speech / Delete
-        if st.button("🟠 Delete Post (delete)", use_container_width=True, type="secondary"):
-            if send_moderation_action(active_tweet["id"], mod_id, "hate_speech", "delete"):
-                st.rerun()
-
-        # Action 4: Severe Threat / Delete & Strike
-        if st.button("🔴 Delete + Issue Strike (delete_and_strike)", use_container_width=True, type="primary"):
-            if send_moderation_action(active_tweet["id"], mod_id, "severe_threat", "delete_and_strike"):
-                st.rerun()
+if not queue_items:
+    st.info("🎉 No active flagged content in queue for this moderator.")
+else:
+    st.subheader(f"📋 Assigned Queue Items ({len(queue_items)})")
+    
+    for item in queue_items:
+        with st.container():
+            st.markdown("---")
+            
+            # Badge selection based on severity
+            sev = item.get("predicted_severity", "Clean")
+            if sev == "Severe Threat":
+                badge_html = f"<span class='badge-severe'>{sev}</span>"
+            elif sev == "Hate Speech":
+                badge_html = f"<span class='badge-hate'>{sev}</span>"
+            elif sev == "Mild Hate":
+                badge_html = f"<span class='badge-mild'>{sev}</span>"
+            else:
+                badge_html = f"<span class='badge-clean'>{sev}</span>"
+            
+            # Header info
+            c1, c2, c3 = st.columns([3, 2, 2])
+            with c1:
+                st.markdown(f"**Post ID:** #{item.get('post_id')}")
+            with c2:
+                st.markdown(f"**Severity:** {badge_html}", unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"**AI Confidence:** `{item.get('confidence_score', 'N/A')}`")
+            
+            # Post Content Box
+            st.info(f"💬 **Content:** \"{item.get('post_text')}\"")
+            st.caption(f"🕒 Timestamp: {item.get('timestamp', 'N/A')} | Dialect Tag: {item.get('dialect', 'General')}")
+            
+            # Enforcement Buttons
+            b1, b2, b3, b4 = st.columns(4)
+            with b1:
+                if st.button("🟢 Approve / Clean", key=f"app_{item['post_id']}", use_container_width=True):
+                    send_moderation_action(active_mod_id, item['post_id'], "Approve")
+            with b2:
+                if st.button("🟡 Warning Reply", key=f"warn_{item['post_id']}", use_container_width=True):
+                    send_moderation_action(active_mod_id, item['post_id'], "Warning Reply")
+            with b3:
+                if st.button("🟠 Delete Post", key=f"del_{item['post_id']}", use_container_width=True):
+                    send_moderation_action(active_mod_id, item['post_id'], "Delete Post")
+            with b4:
+                if st.button("🔴 Delete + Strike", key=f"strike_{item['post_id']}", use_container_width=True):
+                    send_moderation_action(active_mod_id, item['post_id'], "Delete + Issue Strike")
