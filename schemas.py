@@ -9,10 +9,12 @@ class TweetIngestRequest(BaseModel):
     text: str
     author_twitter_id: str
     author_handle: str
+    platform: str = "twitter"
 
 class TweetBase(BaseModel):
     tweet_id_str: str
     text: str
+    platform: str = "twitter"
     author_id: int
     ai_category: Optional[str] = None
     confidence_score: Optional[float] = None

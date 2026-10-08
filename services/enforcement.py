@@ -12,15 +12,36 @@ _TWITTER_ENV_VARS = (
 )
 
 
-def get_adapter():
+def get_adapter(platform=None):
     """Return the appropriate platform adapter based on environment configuration.
 
-    Returns TwitterAdapter when:
-    - all four Twitter credential environment variables are present, AND
-    - tweepy is importable.
+    Selection order:
+    1. Explicit *platform* argument ("twitter", "instagram", "simulated").
+    2. MODERATION_PLATFORM environment variable (same values).
+    3. Twitter-credentials check (all four vars present + tweepy importable).
+    4. SimulatedAdapter (default / fallback).
 
-    Otherwise returns SimulatedAdapter.
+    Calling with no args behaves exactly as before.
     """
+    # Resolve effective platform: explicit arg beats env var
+    effective = platform or os.environ.get("MODERATION_PLATFORM")
+
+    if effective == "instagram":
+        from services.instagram_client import InstagramAdapter  # noqa: PLC0415
+        return InstagramAdapter()
+
+    if effective == "twitter":
+        try:
+            from services.twitter_client import TwitterAdapter  # noqa: PLC0415
+            return TwitterAdapter()
+        except Exception:
+            pass
+        return SimulatedAdapter()
+
+    if effective == "simulated":
+        return SimulatedAdapter()
+
+    # No explicit/env platform – legacy credential-sniffing path (unchanged behaviour)
     creds_present = all(os.environ.get(v) for v in _TWITTER_ENV_VARS)
     if creds_present:
         try:
@@ -37,7 +58,7 @@ class EnforcementService:
     def __init__(self, adapter=None):
         self.adapter = adapter if adapter is not None else get_adapter()
 
-    def execute(self, action_taken: str, tweet=None, db=None, verdict: str = None) -> dict:
+    def execute(self, action_taken: str, tweet=None, db=None, verdict: str = None, *, platform=None) -> dict:
         """Execute a moderator action via platform adapter and record DB logs.
 
         Args:
@@ -45,6 +66,7 @@ class EnforcementService:
             tweet: Tweet model instance or dict containing tweet and author info.
             db: SQLAlchemy session.
             verdict: Moderator verdict (e.g. "clean", "mild_hate", "hate_speech", "severe_threat").
+            platform: Optional platform override passed to get_adapter (keyword-only).
 
         Returns:
             dict: Uniform result structure {platform, action, status, detail}.
@@ -57,7 +79,7 @@ class EnforcementService:
             action_taken = self
             adapter = SimulatedAdapter()
         else:
-            adapter = getattr(self, "adapter", None) or SimulatedAdapter()
+            adapter = getattr(self, "adapter", None) or get_adapter(platform=platform)
 
         if action_taken == "no_action":
             return {

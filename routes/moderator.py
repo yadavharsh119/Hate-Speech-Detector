@@ -115,6 +115,7 @@ def submit_moderator_action(request: schemas.ModeratorActionRequest, db: Session
         tweet,
         db,
         request.verdict,
+        platform=getattr(tweet, "platform", None),
     )
 
     db.commit()

@@ -33,6 +33,7 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
         tweet_id_str=request.tweet_id_str,
         text=request.text,
         author_id=user.id,
+        platform=request.platform,
         status="pending"
     )
     db.add(new_tweet)

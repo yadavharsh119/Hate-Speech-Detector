@@ -22,6 +22,7 @@ class Tweet(Base):
     tweet_id_str = Column(String, unique=True, index=True)
     text = Column(String)
     author_id = Column(Integer, ForeignKey("users.id"))
+    platform = Column(String, default="twitter")
     
     # Classification data from Member 1 (AI)
     ai_category = Column(String, nullable=True)
