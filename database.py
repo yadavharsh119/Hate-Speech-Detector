@@ -22,3 +22,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def ensure_platform_column(bind=None):
+    """Lightweight, idempotent migration: add the missing tweets.platform column.
+
+    Base.metadata.create_all() only creates missing tables, so databases created
+    before models.Tweet gained `platform` would fail at runtime.
+    Existing rows are preserved and backfilled with the model default.
+    Safe on fresh databases (no-op) and when the tweets table does not exist yet.
+    """
+    db_engine = bind if bind is not None else engine
+    with db_engine.begin() as conn:
+        columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(tweets)").fetchall()]
+        if columns and "platform" not in columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE tweets ADD COLUMN platform VARCHAR DEFAULT 'twitter'"
+            )

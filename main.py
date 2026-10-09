@@ -1,12 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, Base
-from routes import tweets, moderator
+from database import engine, Base, ensure_platform_column
+from routes import tweets, moderator, webhook
 
 # Create the database tables
 # This simple setup creates the 'hatespeech.db' file in the root directory
 # and initializes all tables defined in models.py if they don't exist.
 Base.metadata.create_all(bind=engine)
+
+# Backfill support: add tweets.platform to databases created before models.py added it.
+ensure_platform_column(engine)
 
 app = FastAPI(
     title="Hate Speech Detector API",
@@ -28,6 +31,7 @@ app.add_middleware(
 
 app.include_router(tweets.router)
 app.include_router(moderator.router)
+app.include_router(webhook.router)
 
 @app.get("/")
 def read_root():
