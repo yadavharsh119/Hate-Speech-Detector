@@ -1,3 +1,5 @@
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, ensure_platform_column
@@ -11,10 +13,23 @@ Base.metadata.create_all(bind=engine)
 # Backfill support: add tweets.platform to databases created before models.py added it.
 ensure_platform_column(engine)
 
+@asynccontextmanager
+async def lifespan(app):
+    """Start the Instagram comment poller only when POLL_ENABLED=true."""
+    task = None
+    if os.environ.get("POLL_ENABLED", "").lower() == "true":
+        import asyncio
+        from services.comment_poller import poll_loop
+        task = asyncio.create_task(poll_loop())
+    yield
+    if task is not None:
+        task.cancel()
+
 app = FastAPI(
     title="Hate Speech Detector API",
     description="Backend pipeline connecting AI classification, CSP routing, and Moderator Dashboard",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
