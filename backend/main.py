@@ -31,10 +31,9 @@ class PredictRequest(BaseModel):
 
 class PredictResponse(BaseModel):
     internal_label: str
-    category: str
+    category: str | None
     confidence: float
     model_source: str
-
 
 def _model_source_name(classifier) -> str:
     if isinstance(classifier, DistilBertClassifier):

@@ -41,8 +41,8 @@ MAX_SEQ_LENGTH = int(os.getenv("MAX_SEQ_LENGTH", "128"))
 TRAINING_CLASSES_ORDER = ["hate", "offensive", "safe", "threat"]  # alphabetical, matches LabelEncoder
 
 LABEL_DISPLAY_MAP = {
-    "safe": "Clean",
+    "safe": None,          # no severity label for clean content
     "offensive": "Mild",
-    "hate": "Moderate Hate",
+    "hate": "Moderate",
     "threat": "Severe",
 }
