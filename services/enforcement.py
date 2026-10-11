@@ -41,7 +41,7 @@ def get_adapter(platform=None):
     if effective == "simulated":
         return SimulatedAdapter()
 
-    # No explicit/env platform – legacy credential-sniffing path (unchanged behaviour)
+    # No explicit/env platform - legacy credential-sniffing path (unchanged behaviour)
     creds_present = all(os.environ.get(v) for v in _TWITTER_ENV_VARS)
     if creds_present:
         try:
@@ -56,7 +56,8 @@ class EnforcementService:
     """Phase 6 service translating moderator decisions into platform adapter calls and DB logging."""
 
     def __init__(self, adapter=None):
-        self.adapter = adapter if adapter is not None else get_adapter()
+        self.adapter = adapter  # Only an injected adapter is stored here; the default
+        # is resolved lazily in execute() so platform= can select the right adapter.
 
     def execute(self, action_taken: str, tweet=None, db=None, verdict: str = None, *, platform=None) -> dict:
         """Execute a moderator action via platform adapter and record DB logs.
@@ -79,7 +80,13 @@ class EnforcementService:
             action_taken = self
             adapter = SimulatedAdapter()
         else:
-            adapter = getattr(self, "adapter", None) or get_adapter(platform=platform)
+            adapter = getattr(self, "adapter", None)
+            if adapter is None:
+                # Honour the per-tweet platform override, but keep the legacy
+                # credential-sniffed default for "twitter"/"simulated" so behaviour
+                # without configured credentials stays exactly as before.
+                effective = platform if platform not in (None, "", "twitter", "simulated") else None
+                adapter = get_adapter(platform=effective)
 
         if action_taken == "no_action":
             return {
@@ -101,6 +108,12 @@ class EnforcementService:
             tweet_id_str = str(getattr(tweet, "tweet_id_str", None) or getattr(tweet, "id", ""))
             author_id = getattr(tweet, "author_id", None)
             tweet_pk = getattr(tweet, "id", None)
+
+        # Manual comments carry a synthetic id (e.g. "manual_<uuid>") that no
+        # real platform knows about.  Force the simulated adapter so we never
+        # attempt a live API call with a fake id, which would return an error.
+        if tweet_id_str.startswith("manual_"):
+            adapter = SimulatedAdapter()
 
         try:
             if action_taken == "warning_reply":

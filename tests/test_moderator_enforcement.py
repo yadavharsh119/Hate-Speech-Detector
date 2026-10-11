@@ -211,3 +211,53 @@ def test_transaction_ordering(client, sample_data, db_session):
     # After request completes, both ActionLog and Warning must be present
     assert db_session.query(models.ActionLog).count() == 1
     assert db_session.query(models.Warning).count() == 1
+
+def test_warn_manual_comment_non_error(client, db_session):
+    """Warn on a manual_ comment must return a non-error enforcement_status.
+
+    Regression test for: when tweet_id_str starts with 'manual_', the real
+    Instagram/Twitter adapter must NOT be called (it would error on a fake id).
+    Instead, the SimulatedAdapter is used and enforcement_status == 'simulated'.
+    """
+    # Create author user
+    author = models.User(twitter_user_id="u_manual_1", handle="manual_poster")
+    db_session.add(author)
+    db_session.commit()
+    db_session.refresh(author)
+
+    # Create moderator
+    mod = models.Moderator(name="Mod Manual", max_capacity=5, role="general", languages="en")
+    db_session.add(mod)
+    db_session.commit()
+    db_session.refresh(mod)
+
+    # Tweet with a synthetic manual_ id (as created by /api/submit-comment)
+    tweet = models.Tweet(
+        tweet_id_str="manual_abc123",
+        text="This is a manual comment",
+        author_id=author.id,
+        platform="instagram",
+        status="assigned",
+        ai_category="Mild",
+    )
+    db_session.add(tweet)
+    db_session.commit()
+    db_session.refresh(tweet)
+
+    # Assign to the moderator
+    assignment = models.ModeratorAssignment(tweet_id=tweet.id, moderator_id=mod.id)
+    db_session.add(assignment)
+    db_session.commit()
+
+    payload = {
+        "tweet_id": tweet.id,
+        "moderator_id": mod.id,
+        "verdict": "mild_hate",
+        "action_taken": "warning_reply",
+    }
+    response = client.post("/api/moderator-action", json=payload)
+    assert response.status_code == 200
+    resp_json = response.json()
+    # Must never be "error" — SimulatedAdapter returns "simulated"
+    assert resp_json["enforcement_status"] != "error"
+    assert resp_json["enforcement_status"] == "simulated"
