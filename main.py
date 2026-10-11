@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, ensure_platform_column
 from routes import tweets, moderator, webhook
+from routes import manual_comment
 
 # Create the database tables
 # This simple setup creates the 'hatespeech.db' file in the root directory
@@ -48,6 +49,7 @@ app.add_middleware(
 app.include_router(tweets.router)
 app.include_router(moderator.router)
 app.include_router(webhook.router)
+app.include_router(manual_comment.router)
 
 @app.get("/")
 def read_root():
