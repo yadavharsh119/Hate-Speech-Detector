@@ -21,6 +21,7 @@ async def lifespan(app):
         import asyncio
         from services.comment_poller import poll_loop
         task = asyncio.create_task(poll_loop())
+        print("Comment poller started, interval={}s".format(os.environ.get("POLL_INTERVAL_SECONDS", "45")))
     yield
     if task is not None:
         task.cancel()

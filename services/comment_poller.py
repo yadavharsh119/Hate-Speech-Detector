@@ -1,4 +1,4 @@
-﻿"""Fallback polling of recent Instagram comments when webhooks do not deliver events."""
+"""Fallback polling of recent Instagram comments when webhooks do not deliver events."""
 import asyncio
 import os
 
@@ -34,11 +34,11 @@ async def _get_json(client: httpx.AsyncClient, url: str, params: dict):
     return response.json()
 
 
-def _ingest_comment(comment: dict) -> None:
+def _ingest_comment(comment: dict) -> bool:
     """Ingest one comment exactly like routes/webhook.py does (duplicate-safe)."""
     comment_id = comment.get("id")
     if not comment_id:
-        return
+        return False
     username = comment.get("username") or "unknown"
     db = SessionLocal()
     try:
@@ -52,6 +52,7 @@ def _ingest_comment(comment: dict) -> None:
             ),
             db,
         )
+        return True
     except HTTPException as exc:
         if exc.status_code == 400:  # duplicate comment already in workflow
             return
@@ -60,9 +61,22 @@ def _ingest_comment(comment: dict) -> None:
         print(f"[poller] ingest error: {_redact(str(exc))}")
     finally:
         db.close()
+    return False
 
 
 async def poll_once() -> None:
+    counts = {"media": 0, "comments": 0, "new": 0}
+    try:
+        await _poll_once(counts)
+    finally:
+        print(
+            "Poll cycle: {} media checked, {} comments seen, {} new".format(
+                counts["media"], counts["comments"], counts["new"]
+            )
+        )
+
+
+async def _poll_once(counts) -> None:
     token = os.environ.get("INSTAGRAM_ACCESS_TOKEN")
     account = os.environ.get("IG_ACCOUNT_ID")
     if not token or not account:
@@ -79,6 +93,7 @@ async def poll_once() -> None:
         if not media:
             return
         for item in media.get("data", []):
+            counts["media"] += 1
             media_id = item.get("id")
             if not media_id:
                 continue
@@ -90,7 +105,9 @@ async def poll_once() -> None:
             if not comments:
                 continue
             for comment in comments.get("data", []):
-                _ingest_comment(comment)
+                counts["comments"] += 1
+                if _ingest_comment(comment):
+                    counts["new"] += 1
 
 
 async def poll_loop() -> None:
