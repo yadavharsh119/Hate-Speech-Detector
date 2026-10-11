@@ -106,7 +106,7 @@ async def _poll_once(counts) -> None:
                 continue
             for comment in comments.get("data", []):
                 counts["comments"] += 1
-                if _ingest_comment(comment):
+                if await asyncio.to_thread(_ingest_comment, comment):
                     counts["new"] += 1
 
 
@@ -114,10 +114,17 @@ async def poll_loop() -> None:
     """Run poll_once forever; never dies on a transient error."""
     while True:
         try:
+            print("Poll cycle start", flush=True)
             await poll_once()
         except Exception as exc:
-            print(f"[poller] poll error: {_redact(str(exc))}")
-        interval = int(
-            os.environ.get("POLL_INTERVAL_SECONDS", str(DEFAULT_POLL_INTERVAL_SECONDS))
-        )
+            print(
+                f"Poll cycle error: {type(exc).__name__}: {_redact(str(exc))}",
+                flush=True,
+            )
+        try:
+            interval = int(
+                os.environ.get("POLL_INTERVAL_SECONDS", str(DEFAULT_POLL_INTERVAL_SECONDS))
+            )
+        except (ValueError, TypeError):
+            interval = DEFAULT_POLL_INTERVAL_SECONDS
         await asyncio.sleep(interval)
