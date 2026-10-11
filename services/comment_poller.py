@@ -21,17 +21,43 @@ def _redact(message: str) -> str:
     return message
 
 
-async def _get_json(client: httpx.AsyncClient, url: str, params: dict):
+async def _get_json(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict,
+    kind: str = "",
+    media_id: str = "",
+):
     """GET url with query params; return parsed JSON or None after logging errors."""
     try:
         response = await client.get(url, params=params)
     except httpx.HTTPError as exc:
-        print(f"[poller] request error: {_redact(str(exc))}")
+        print(f"[poller] request error: {_redact(str(exc))}", flush=True)
         return None
-    if response.status_code != 200:
-        print(f"[poller] HTTP {response.status_code}: {_redact(response.text[:300])}")
+    status = response.status_code
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+    if kind == "media":
+        items = len(payload.get("data", [])) if isinstance(payload, dict) else 0
+        print(f"Media call: status={status}, items={items}", flush=True)
+    elif kind == "comments":
+        items = len(payload.get("data", [])) if isinstance(payload, dict) else 0
+        print(
+            f"Comments call: media={media_id}, status={status}, items={items}",
+            flush=True,
+        )
+    if status != 200:
+        print(f"[poller] HTTP {status}: {_redact(response.text[:300])}", flush=True)
+        if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+            error = payload["error"]
+            print(
+                f"[poller] error message={error.get('message')!r} code={error.get('code')}",
+                flush=True,
+            )
         return None
-    return response.json()
+    return payload
 
 
 def _ingest_comment(comment: dict) -> bool:
@@ -88,19 +114,23 @@ async def _poll_once(counts) -> None:
         media = await _get_json(
             client,
             f"{base}/{account}/media",
-            {**auth, "fields": "id,timestamp", "limit": 5},
+            {**auth, "fields": "id,timestamp,comments_count", "limit": 5},
+            kind="media",
         )
         if not media:
             return
         for item in media.get("data", []):
             counts["media"] += 1
             media_id = item.get("id")
+            print(f"Media {media_id}: comments_count={item.get('comments_count')}", flush=True)
             if not media_id:
                 continue
             comments = await _get_json(
                 client,
                 f"{base}/{media_id}/comments",
                 {**auth, "fields": "id,text,username,timestamp", "limit": 25},
+                kind="comments",
+                media_id=media_id,
             )
             if not comments:
                 continue
