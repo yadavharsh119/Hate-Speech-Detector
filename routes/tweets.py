@@ -47,7 +47,9 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
     new_tweet.confidence_score = ai_result["confidence_score"]
     
     # 5. Member 2: CSP Assignment (only if flagged)
-    if ai_result["flagged"]:
+    if new_tweet.ai_category == "Clean":
+        new_tweet.status = "resolved"
+    elif ai_result["flagged"]:
         from services.csp_assigner import assign_moderator
         assigned_mod_id = assign_moderator(new_tweet.id, new_tweet.ai_category, new_tweet.text, db)
         
@@ -68,7 +70,7 @@ def ingest_tweet(request: schemas.TweetIngestRequest, db: Session = Depends(get_
             # AI flagged it, but no moderators are available right now
             new_tweet.status = "queued"
     else:
-        # Clean tweet, no review needed
+        # No review needed
         new_tweet.status = "classified"
 
     db.commit()
