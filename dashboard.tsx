@@ -96,7 +96,7 @@ function Dashboard() {
       </aside>
 
       <main className="flex-1 p-6 md:p-10">
-        <h1 className="text-2xl font-bold">Priority Queue Feed</h1>
+        <h1 className="text-2xl font-bold">Comments</h1>
         <p className="text-sm text-muted-foreground">Comments assigned to you, sorted by severity, then AI confidence.</p>
         <div className="mt-6 space-y-4">
           {queue.length === 0 && <p className="text-muted-foreground">Queue is clear. 🎉</p>}
