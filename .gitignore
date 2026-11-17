@@ -77,6 +77,8 @@ dataset/*.csv
 .env.txt
 model_files/
 model_files.zip
+node_modules/
+frontend/node_modules/
 
 # Nested accidental clone - do not track
 Hate-Speech-Detector/
