@@ -72,3 +72,11 @@ model/distilbert_final/
 model/ann/*.pt
 dataset/*.csv
 *.pkl
+
+# Local secrets and scratch files - never commit
+.env.txt
+model_files/
+model_files.zip
+
+# Nested accidental clone - do not track
+Hate-Speech-Detector/
